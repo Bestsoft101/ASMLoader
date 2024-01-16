@@ -1,0 +1,4 @@
+Manifest-Version: 1.0 
+Premain-Class: b100.asmloader.internal.ASMLoaderAgent
+Main-Class: b100.asmloader.gui.ASMLoaderGUI
+Can-Retransform-Classes: true
