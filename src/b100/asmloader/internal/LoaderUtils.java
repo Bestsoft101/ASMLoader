@@ -3,6 +3,8 @@ package b100.asmloader.internal;
 import java.io.File;
 import java.io.InputStream;
 import java.lang.reflect.Constructor;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -316,6 +318,14 @@ public class LoaderUtils {
 			}
 		}
 		return list;
+	}
+	
+	public static Path getClassPath(Class<?> clazz) {
+		try {
+			return Paths.get(clazz.getProtectionDomain().getCodeSource().getLocation().toURI());
+		}catch (Exception e) {
+			throw new RuntimeException("Could not get source of class '" + clazz.getName() + "'!", e);
+		}
 	}
 	
 	void log(String string) {
