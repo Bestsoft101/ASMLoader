@@ -1,6 +1,7 @@
 package b100.asmloader.internal;
 
 import java.io.File;
+import java.io.IOException;
 import java.io.InputStream;
 import java.lang.reflect.Constructor;
 import java.nio.file.Path;
@@ -155,6 +156,8 @@ public class LoaderUtils {
 				throw new NullPointerException("No Mod ID in asmloader.mod.json!");
 			}
 			
+			String version = modJson.has("version") ? modJson.getString("version") : null;
+			
 			// Read transformers array
 			List<String> transformers = null;
 			if(modJson.has("transformers")) {
@@ -167,7 +170,7 @@ public class LoaderUtils {
 				transformers = new ArrayList<>();
 			}
 			
-			return new ModInfo(modFile, modid, transformers, isOnClassPath);
+			return new ModInfo(modFile, modid, version, transformers, isOnClassPath);
 		}catch (Exception e) {
 			// Add file path to the crash info
 			throw new RuntimeException("Error loading mod: '" + modFile.getAbsolutePath() + "'!", e);
@@ -310,7 +313,7 @@ public class LoaderUtils {
 		}
 	}
 	
-	public static List<File> toList(File[] files) {
+	public List<File> toList(File[] files) {
 		List<File> list = new ArrayList<>();
 		for(int i=0; i < files.length; i++) {
 			if(files[i] != null) {
@@ -326,6 +329,26 @@ public class LoaderUtils {
 		}catch (Exception e) {
 			throw new RuntimeException("Could not get source of class '" + clazz.getName() + "'!", e);
 		}
+	}
+	
+	public byte[] readAll(InputStream inputStream) throws IOException {
+		final int cacheSize = 4096;
+		
+		ByteCache byteCache = new ByteCache();
+		while(true) {
+			byte[] cache = new byte[cacheSize];
+			int read = inputStream.read(cache, 0, cache.length);
+			if(read == -1) {
+				break;
+			}
+			byteCache.put(cache, 0, read);
+		}
+		
+		try {
+			inputStream.close();
+		}catch (Exception e) {}
+		
+		return byteCache.getAll();
 	}
 	
 	void log(String string) {

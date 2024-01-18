@@ -27,7 +27,7 @@ import b100.asmloader.internal.Log;
 import b100.asmloader.internal.ModInfo;
 import b100.utils.FileUtils;
 
-public class ModExporter implements Log {
+public class ModExporter implements Log, Runnable {
 	
 	public final List<File> modFiles = new ArrayList<>();
 	
@@ -46,7 +46,7 @@ public class ModExporter implements Log {
 	
 	protected ClassLoader classLoader;
 	
-	public void run() throws IOException {
+	public void run() {
 		if(outputFile == null) {
 			outputFile = new File("asmloader-export.jar");
 		}
@@ -102,22 +102,26 @@ public class ModExporter implements Log {
 		}
 	}
 	
-	protected void createClassLoader() throws IOException {
-		URL[] urls = new URL[modInfos.size()];
-		
-		for(int i=0; i < modInfos.size(); i++) {
-			ModInfo mod = modInfos.get(i);
+	protected void createClassLoader() {
+		try {
+			URL[] urls = new URL[modInfos.size()];
 			
-			URL url;
-			if(mod.file.isFile()) {
-				url = new URL("jar:file:" + mod.file.getAbsolutePath() + "!/");
-			}else {
-				url = mod.file.toURI().toURL();
+			for(int i=0; i < modInfos.size(); i++) {
+				ModInfo mod = modInfos.get(i);
+				
+				URL url;
+				if(mod.file.isFile()) {
+					url = new URL("jar:file:" + mod.file.getAbsolutePath() + "!/");
+				}else {
+					url = mod.file.toURI().toURL();
+				}
+				urls[i] = url;
 			}
-			urls[i] = url;
+			
+			this.classLoader = new URLClassLoader(urls);
+		}catch (Exception e) {
+			throw new RuntimeException("Creating ClassLoader", e);
 		}
-		
-		this.classLoader = new URLClassLoader(urls);
 	}
 	
 	protected void loadClassTransformers() {
@@ -150,7 +154,7 @@ public class ModExporter implements Log {
 			byte[] bytes;
 			try {
 				in = zipFile.getInputStream(entry);
-				bytes = readAll(in);
+				bytes = loaderUtils.readAll(in);
 			}catch (Exception e) {
 				throw new RuntimeException("Could not read class: '"+className+"'!", e);
 			}
@@ -186,106 +190,109 @@ public class ModExporter implements Log {
 		}
 	}
 	
-	protected void export() throws IOException {
-		FileOutputStream fileOutputStream;
-		ZipOutputStream zipOutputStream;
-		FileUtils.createFolderForFile(outputFile);
+	protected void export() {
 		try {
-			fileOutputStream = new FileOutputStream(outputFile);
-			zipOutputStream = new ZipOutputStream(fileOutputStream);
-		}catch (Exception e) {
-			throw new RuntimeException("Could not open output file: "+outputFile.getAbsolutePath(), e);
-		}
-		
-		Set<String> writtenEntries = new HashSet<>();
-		
-		if(includeOverrides) {
-			// Write modified classes into jar
-			for(String className : modifiedClasses) {
-				String classPath = className + ".class";
-				
-				ClassNode classNode = allClasses.get(className);
-				byte[] bytes = ASMHelper.getBytes(classNode);
-				
-				writeToZip(zipOutputStream, classPath, bytes);
-				writtenEntries.add(classPath);
+			FileOutputStream fileOutputStream;
+			ZipOutputStream zipOutputStream;
+			FileUtils.createFolderForFile(outputFile);
+			try {
+				fileOutputStream = new FileOutputStream(outputFile);
+				zipOutputStream = new ZipOutputStream(fileOutputStream);
+			}catch (Exception e) {
+				throw new RuntimeException("Could not open output file: "+outputFile.getAbsolutePath(), e);
 			}
-		}
-		if(includeModFiles) {
-			// Write other resources into jar
-			for(ModInfo mod : modInfos) {
-				ZipFile zipFile = null;
-				
-				List<String> allResources = new ArrayList<>();
-				
-				if(mod.file.isFile()) {
-					zipFile = new ZipFile(mod.file);
+			
+			Set<String> writtenEntries = new HashSet<>();
+			
+			if(includeOverrides) {
+				// Write modified classes into jar
+				for(String className : modifiedClasses) {
+					String classPath = className + ".class";
 					
-					Enumeration<? extends ZipEntry> entries = zipFile.entries();
-					while(entries.hasMoreElements()) {
-						ZipEntry entry = entries.nextElement();
-						if(entry.getName().endsWith("/")) {
+					ClassNode classNode = allClasses.get(className);
+					byte[] bytes = ASMHelper.getBytes(classNode);
+					
+					writeToZip(zipOutputStream, classPath, bytes);
+					writtenEntries.add(classPath);
+				}
+			}
+			if(includeModFiles) {
+				// Write other resources into jar
+				for(ModInfo mod : modInfos) {
+					ZipFile zipFile = null;
+					
+					List<String> allResources = new ArrayList<>();
+					
+					if(mod.file.isFile()) {
+						zipFile = new ZipFile(mod.file);
+						
+						Enumeration<? extends ZipEntry> entries = zipFile.entries();
+						while(entries.hasMoreElements()) {
+							ZipEntry entry = entries.nextElement();
+							if(entry.getName().endsWith("/")) {
+								continue;
+							}
+							allResources.add(entry.getName());
+						}
+					}else {
+						int pathLength = mod.file.getAbsolutePath().length();
+						List<File> allFiles = FileUtils.getAllFiles(mod.file);
+						for(File file : allFiles) {
+							allResources.add(file.getAbsolutePath().substring(pathLength + 1).replace('\\', '/'));
+						}
+					}
+					
+					for(String entry : allResources) {
+						print("Copy Resource: '" + entry + "'");
+						if(entry.equals("asmloader.mod.json")) {
 							continue;
 						}
-						allResources.add(entry.getName());
-					}
-				}else {
-					int pathLength = mod.file.getAbsolutePath().length();
-					List<File> allFiles = FileUtils.getAllFiles(mod.file);
-					for(File file : allFiles) {
-						allResources.add(file.getAbsolutePath().substring(pathLength + 1).replace('\\', '/'));
-					}
-				}
-				
-				for(String entry : allResources) {
-					print("Copy Resource: '" + entry + "'");
-					if(entry.equals("asmloader.mod.json")) {
-						continue;
+						
+						if(writtenEntries.contains(entry)) {
+							print("Duplicate Resource: '"+entry+"'!");
+							continue;
+						}
+						
+						InputStream in = null;
+						if(zipFile != null) {
+							in = zipFile.getInputStream(zipFile.getEntry(entry));
+						}else {
+							in = new FileInputStream(new File(mod.file, entry));
+						}
+						
+						try {
+							byte[] data = loaderUtils.readAll(in);
+							
+							zipOutputStream.putNextEntry(new ZipEntry(entry));
+							zipOutputStream.write(data);
+							
+							writtenEntries.add(entry);
+						} catch (Exception e) {
+							throw new RuntimeException("Error writing to zip file!", e);
+						}
+						
+						try {
+							in.close();
+						}catch (Exception e) {}
 					}
 					
-					if(writtenEntries.contains(entry)) {
-						print("Duplicate Resource: '"+entry+"'!");
-						continue;
-					}
-					
-					InputStream in = null;
 					if(zipFile != null) {
-						in = zipFile.getInputStream(zipFile.getEntry(entry));
-					}else {
-//						File file = new File(mod.file, entry);
-						in = new FileInputStream(new File(mod.file, entry));
+						try {
+							zipFile.close();
+						}catch (Exception e) {}
 					}
-					
-					try {
-						byte[] data = readAll(in);
-						
-						zipOutputStream.putNextEntry(new ZipEntry(entry));
-						zipOutputStream.write(data);
-						
-						writtenEntries.add(entry);
-					} catch (Exception e) {
-						throw new RuntimeException("Error writing to zip file!", e);
-					}
-					
-					try {
-						in.close();
-					}catch (Exception e) {}
-				}
-				
-				if(zipFile != null) {
-					try {
-						zipFile.close();
-					}catch (Exception e) {}
 				}
 			}
+			
+			try {
+				zipOutputStream.close();
+			}catch (Exception e) {}
+			try {
+				fileOutputStream.close();
+			}catch (Exception e) {}
+		}catch (Exception e) {
+			throw new RuntimeException("Exporting", e);
 		}
-		
-		try {
-			zipOutputStream.close();
-		}catch (Exception e) {}
-		try {
-			fileOutputStream.close();
-		}catch (Exception e) {}
 	}
 
 	@Override
@@ -313,26 +320,6 @@ public class ModExporter implements Log {
 		}catch (Exception e) {
 			throw new RuntimeException("Error to zip file: "+entry, e);
 		}
-	}
-	
-	private static byte[] readAll(InputStream inputStream) throws IOException {
-		final int cacheSize = 4096;
-		
-		ByteCache byteCache = new ByteCache();
-		while(true) {
-			byte[] cache = new byte[cacheSize];
-			int read = inputStream.read(cache, 0, cache.length);
-			if(read == -1) {
-				break;
-			}
-			byteCache.put(cache, 0, read);
-		}
-		
-		try {
-			inputStream.close();
-		}catch (Exception e) {}
-		
-		return byteCache.getAll();
 	}
 	
 }

@@ -102,7 +102,7 @@ public class ModExporterGUI extends GridPanel implements ActionListener, FileDro
 					File[] filesInDirectory = file.listFiles();
 					
 					if(filesInDirectory != null && filesInDirectory.length > 0) {
-						addMultipleMods(LoaderUtils.toList(filesInDirectory));
+						addMultipleMods(loaderUtils.toList(filesInDirectory));
 					}
 					
 					return;

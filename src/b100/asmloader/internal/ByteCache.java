@@ -1,4 +1,4 @@
-package b100.asmloader.exporter;
+package b100.asmloader.internal;
 
 import java.util.ArrayList;
 import java.util.List;

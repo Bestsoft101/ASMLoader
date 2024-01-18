@@ -135,7 +135,7 @@ public abstract class FileUtils {
 			InputStream in = new FileInputStream(from);
 			OutputStream out = new FileOutputStream(to);
 			
-			StreamUtils.transferData(in, out);
+			StreamUtils.transferDataAndClose(in, out);
 			
 			in.close();
 			out.close();

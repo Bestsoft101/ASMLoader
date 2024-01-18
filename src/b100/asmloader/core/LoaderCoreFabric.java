@@ -21,6 +21,7 @@ import org.objectweb.asm.tree.MethodNode;
 import b100.asmloader.internal.ASMHelper;
 import b100.asmloader.internal.ASMLoaderTransformer;
 import b100.asmloader.internal.LoaderUtils;
+import b100.asmloader.internal.LoaderUtilsFabric;
 import b100.asmloader.internal.Log;
 import b100.utils.ReflectUtils;
 
@@ -38,6 +39,8 @@ public class LoaderCoreFabric extends LoaderCoreDefault implements Log {
 			throw new RuntimeException("Instance already exists!");
 		}
 		instance = this;
+		
+		this.loaderUtils = new LoaderUtilsFabric(this);
 	}
 	
 	@Override
