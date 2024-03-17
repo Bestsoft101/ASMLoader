@@ -22,7 +22,7 @@ public class ASMHelper {
 	}
 	
 	public static byte[] getBytes(ClassNode classNode) {
-		ClassWriter classWriter = new ClassWriter(ClassWriter.COMPUTE_MAXS);
+		ClassWriter classWriter = new ClassWriter(ClassWriter.COMPUTE_FRAMES);
 		classNode.accept(classWriter);
 		return classWriter.toByteArray();
 	}
